@@ -1,0 +1,3 @@
+query,drug,top_hit,lookup_score
+D1,carbamazepine,CYP3A4 substrate,0
+D2,fluoxetine,CYP3A4 substrate,0

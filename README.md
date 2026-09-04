@@ -18,9 +18,12 @@
 
 ## 📖 What It Does
 
-CYP Drug Interaction Checker
-CYP450 substrate/inhibitor/inducer interaction checker with severity tiers.
-Stdlib parser / mapper with batch CSV and single lookup.
+CYP Drug Interaction Checker is a tool for identifying and classifying CYP450 drug-drug interactions. It supports:
+
+- **Single drug lookup** with token overlap and substring scoring
+- **Batch CSV processing** for high-throughput screening
+- **Severity tier classification** (major, moderate, minor)
+- **Interaction type identification** (substrate, inhibitor, inducer)
 
 ---
 
@@ -28,59 +31,91 @@ Stdlib parser / mapper with batch CSV and single lookup.
 
 ### 🔬 Analytical Functions
 
-- **`lookup()`**: Single lookup: token overlap + substring scoring (no deps). Returns top hits.
-- **`process_csv()`** — calculates and validates process_csv parameters.
-- **`build_parser()`** — calculates and validates build_parser parameters.
-- **`main()`** — calculates and validates main parameters.
+- **`lookup()`**: Single drug lookup using token overlap + substring scoring. Returns top hits with interaction type and severity.
+- **`process_csv()`**: Batch processing of CSV files with drug interaction lookups.
+- **`build_parser()`**: CLI argument parser construction.
+- **`main()`**: CLI entry point.
 
 ---
 
-## 📐 Mathematical Formulation & Logic
+## 📐 Scoring Algorithm
 
 ```text
-  score = 0
+score = 0
+if key in query: score += 10          # Substring match bonus
+score += token_overlap * 2             # Token overlap scoring
+score += severity_weight               # Major=3, Moderate=2, Minor=1
+```
+
+---
+
+## 💻 Installation
+
+```bash
+# Clone the repository
+git clone https://github.com/abusuraihsakhri/cyp-drug-interaction-checker.git
+cd cyp-drug-interaction-checker
+
+# Create virtual environment
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
 ```
 
 ---
 
 ## 💻 CLI Quickstart & Usage
 
-### 1. Guided Interactive Mode
+### 1. Single Drug Lookup
 ```bash
-python cli.py
+python cyp_checker.py single ketoconazole
+python cyp_checker.py single --query "simvastatin"
 ```
 
-### 2. Direct Parameterized Evaluation
+### 2. Batch CSV Processing
 ```bash
-python cli.py --task-id <value> --target <value> --primary <value> --secondary <value>
+python cyp_checker.py batch --input sample.csv --output results.csv
 ```
 
-### Parameter Reference
-- `--task-id`: Specifies input measurement or parameter value.
-- `--target`: Specifies input measurement or parameter value.
-- `--primary`: Specifies input measurement or parameter value.
-- `--secondary`: Specifies input measurement or parameter value.
-- `--critical`: Specifies input measurement or parameter value.
-- `--status`: Specifies input measurement or parameter value.
-- `--input`: Specifies input measurement or parameter value.
-- `--output`: Specifies input measurement or parameter value.
+### 3. Enterprise Supervisor Mode
+```bash
+# Run single audit task
+python cli.py audit --task-id TASK-001 --primary 28.5 --secondary 14.2
+
+# Batch process records
+python cli.py batch -i sample.csv -o results.csv
+
+# Verify audit trail integrity
+python cli.py verify-audit
+
+# Launch FastAPI REST server
+python cli.py serve --host 127.0.0.1 --port 8000
+```
 
 ### Input Data Schema
 
 | Field | Description | Requirement |
 |:------|:------------|:------------|
-| `query` | Parameter / observation metric | Required |
-| `drug` | Parameter / observation metric | Required |
+| `query` | Drug name or CYP interaction term | Required |
+| `drug` | Alternative drug name column | Optional |
 
 ---
 
 ## 🛡️ Security & Enterprise Architecture
 
-* **Zero-PHI Outbound Interceptor:** Active AST and regex inspection blocking SSNs, MRNs, phone numbers, and patient identifiers.
-* **Tamper-Evident HMAC-SHA256 Audit Trail:** Chained, cryptographically signed logs for every evaluation and state transition.
-* **Air-Gapped LLM Reasoning Adapter:** Agnostic integration for local Ollama instances (`llama3`, `mistral`), Claude 3.5 Sonnet, GPT-4o, and deterministic test mocks.
-* **Active Learning Bayesian Calibration:** Dynamic tracker updating worker reliability weights and monitoring Brier calibration drift.
+* **Zero-PHI Outbound Interceptor:** Active regex inspection blocking SSNs, MRNs, phone numbers, and patient identifiers.
+* **Tamper-Evident HMAC-SHA256 Audit Trail:** Chained, cryptographically signed logs for every evaluation.
 * **FastAPI & Prometheus Telemetry:** Exposes OpenAPI 3.1 REST endpoints and operational Prometheus metrics (`/metrics`).
+
+### Security Configuration
+
+Set the `AUDIT_SECRET_KEY` environment variable for production use:
+
+```bash
+export AUDIT_SECRET_KEY="your-secure-random-key"
+```
 
 ---
 
@@ -95,7 +130,7 @@ pytest -v
 Execute high-throughput batch simulation benchmarks:
 
 ```bash
-python simulator.py --tasks 1000 --concurrency 8
+python simulator.py 1000
 ```
 
 ---
@@ -103,6 +138,30 @@ python simulator.py --tasks 1000 --concurrency 8
 ## 🐳 Container Deployment
 
 ```bash
+# Build and run with Docker
 docker build -t cyp-drug-interaction-checker .
-docker run -p 8000:8000 cyp-drug-interaction-checker
+docker run -p 8000:8000 -e AUDIT_SECRET_KEY=your-secret cyp-drug-interaction-checker
+
+# Or use Docker Compose
+AUDIT_SECRET_KEY=your-secret docker-compose up
 ```
+
+---
+
+## 📊 CYP450 Drug Database
+
+The built-in database includes common CYP450 interactions:
+
+| Enzyme | Interaction Type | Examples |
+|:-------|:-----------------|:---------|
+| CYP3A4 | Inhibitor | Ketoconazole, Itraconazole, Clarithromycin, Ritonavir |
+| CYP3A4 | Substrate | Simvastatin, Midazolam, Cyclosporine |
+| CYP3A4 | Inducer | Carbamazepine, Phenytoin, Rifampin |
+| CYP2D6 | Inhibitor | Fluoxetine, Paroxetine, Quinidine |
+| CYP2D6 | Substrate | Codeine, Tamoxifen, Metoprolol |
+| CYP2C19 | Inhibitor | Omeprazole |
+| CYP2C19 | Substrate | Clopidogrel |
+| CYP2C9 | Inhibitor | Fluconazole |
+| CYP2C9 | Substrate | Warfarin |
+| CYP1A2 | Inhibitor | Fluvoxamine |
+| CYP2B6 | Substrate | Efavirenz, Bupropion |

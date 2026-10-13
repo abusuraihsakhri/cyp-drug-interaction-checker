@@ -1,5 +1,7 @@
 # CYP Drug Interaction Checker
 
+### [Open the Live Application →](https://abusuraihsakhri.github.io/cyp-drug-interaction-checker/)
+
 A small, open-source **CYP450 drug-role reference lookup** with command-line, batch CSV, browser, and FastAPI interfaces. The built-in catalog contains 25 records across CYP3A4, CYP2D6, CYP2C19, CYP2C9, CYP1A2, and CYP2B6.
 
 > **Clinical limitation:** This is an educational catalog, **not** a clinically validated drug–drug interaction rules engine. The labels `major`, `moderate`, and `minor` are inherited record tags, not evidence-based risk assessments for any drug pair. No interaction absence or medication safety can be inferred from a missing catalog match. Check current official labeling and clinical interaction resources before prescribing.

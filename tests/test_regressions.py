@@ -57,3 +57,11 @@ def test_exposed_trail_is_copy():
 def test_nonfinite_metric(value):
     with pytest.raises(ValidationError):
         SystemTaskPayload(task_id="case", target_identifier="research", primary_metric=value)
+
+def test_cli_csv_export_escapes_spreadsheet_formulas(tmp_path):
+    source, target = tmp_path / "in.csv", tmp_path / "out.csv"
+    source.write_text('query,notes\nwarfarin,=1+1\n')
+    process_csv(source, target)
+    with target.open(newline="") as f:
+        entry = next(csv.DictReader(f))
+    assert entry["notes"] == "'=1+1"

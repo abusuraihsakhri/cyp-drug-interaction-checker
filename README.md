@@ -1,167 +1,62 @@
 # CYP Drug Interaction Checker
 
-> **Domain:** Computational Biology & AI Drug Discovery  
-> **Reference Guidelines & Standards:** `wwPDB, IUPAC & CLSI Computational Guidelines`
+A small, open-source **CYP450 drug-role reference lookup** with command-line, batch CSV, browser, and FastAPI interfaces. The built-in catalog contains 25 records across CYP3A4, CYP2D6, CYP2C19, CYP2C9, CYP1A2, and CYP2B6.
 
-<div align="center">
+> **Clinical limitation:** This is an educational catalog, **not** a clinically validated drug–drug interaction rules engine. The labels `major`, `moderate`, and `minor` are inherited record tags, not evidence-based risk assessments for any drug pair. No interaction absence or medication safety can be inferred from a missing catalog match. Check current official labeling and clinical interaction resources before prescribing.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-![Python](https://img.shields.io/badge/Python-3.10%20%7C%203.11%20%7C%203.12-3776AB.svg?logo=python&logoColor=white)
-![FastAPI](https://img.shields.io/badge/FastAPI-0.111-009688.svg?logo=fastapi&logoColor=white)
-![Audit Trail](https://img.shields.io/badge/Audit-HMAC--SHA256_Tamper--Evident-brightgreen.svg)
-![Zero-PHI Guard](https://img.shields.io/badge/Guard-Zero--PHI_Outbound-blue.svg)
-![Docker](https://img.shields.io/badge/Docker-Ready-2496ED.svg?logo=docker&logoColor=white)
+## Browser interface
 
-</div>
+Open `web/index.html` in a browser, or serve the project with FastAPI. The static interface supports text lookup, CSV upload, preview, and CSV export. Its JS dataset is verified against the Python catalog in CI.
 
----
+**Browser privacy:** Lookup and uploaded CSV data are processed in local memory. No browser input is sent to the application server, and the page loads no external JS, fonts, or analytics. Do not upload identifiable patient data.
 
-## 📖 What It Does
+## Python quickstart
 
-CYP Drug Interaction Checker is a tool for identifying and classifying CYP450 drug-drug interactions. It supports:
+Requires Python 3.10–3.12.
 
-- **Single drug lookup** with token overlap and substring scoring
-- **Batch CSV processing** for high-throughput screening
-- **Severity tier classification** (major, moderate, minor)
-- **Interaction type identification** (substrate, inhibitor, inducer)
-
----
-
-## ⚙️ Key Capabilities & Algorithmic Modules
-
-### 🔬 Analytical Functions
-
-- **`lookup()`**: Single drug lookup using token overlap + substring scoring. Returns top hits with interaction type and severity.
-- **`process_csv()`**: Batch processing of CSV files with drug interaction lookups.
-- **`build_parser()`**: CLI argument parser construction.
-- **`main()`**: CLI entry point.
-
----
-
-## 📐 Scoring Algorithm
-
-```text
-score = 0
-if key in query: score += 10          # Substring match bonus
-score += token_overlap * 2             # Token overlap scoring
-score += severity_weight               # Major=3, Moderate=2, Minor=1
-```
-
----
-
-## 💻 Installation
-
-```bash
-# Clone the repository
-git clone https://github.com/abusuraihsakhri/cyp-drug-interaction-checker.git
-cd cyp-drug-interaction-checker
-
-# Create virtual environment
+```sh
 python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+source .venv/bin/activate
+python -m pip install -r requirements.txt
 
-# Install dependencies
-pip install -r requirements.txt
-```
-
----
-
-## 💻 CLI Quickstart & Usage
-
-### 1. Single Drug Lookup
-```bash
 python cyp_checker.py single ketoconazole
-python cyp_checker.py single --query "simvastatin"
-```
-
-### 2. Batch CSV Processing
-```bash
+python cyp_checker.py single --query "CYP2D6 inhibitor"
 python cyp_checker.py batch --input sample.csv --output results.csv
+python -m pytest -q
 ```
 
-### 3. Enterprise Supervisor Mode
-```bash
-# Run single audit task
-python cli.py audit --task-id TASK-001 --primary 28.5 --secondary 14.2
+CSV input requires a header. Prefer `query` or `drug`; otherwise the first column is searched. The CLI adds `top_hit`, `lookup_score`, `interaction_type`, and `severity` columns. Search scores indicate **string relevance**, not interaction probability, pharmacokinetic effect or clinical severity.
 
-# Batch process records
-python cli.py batch -i sample.csv -o results.csv
+## API and container
 
-# Verify audit trail integrity
-python cli.py verify-audit
-
-# Launch FastAPI REST server
+```sh
 python cli.py serve --host 127.0.0.1 --port 8000
+# Browser: http://127.0.0.1:8000/
+# Interactive API docs: http://127.0.0.1:8000/docs
+# GET /api/lookup?query=simvastatin
+# GET /health and /metrics (JSON)
 ```
 
-### Input Data Schema
-
-| Field | Description | Requirement |
-|:------|:------------|:------------|
-| `query` | Drug name or CYP interaction term | Required |
-| `drug` | Alternative drug name column | Optional |
-
----
-
-## 🛡️ Security & Enterprise Architecture
-
-* **Zero-PHI Outbound Interceptor:** Active regex inspection blocking SSNs, MRNs, phone numbers, and patient identifiers.
-* **Tamper-Evident HMAC-SHA256 Audit Trail:** Chained, cryptographically signed logs for every evaluation.
-* **FastAPI & Prometheus Telemetry:** Exposes OpenAPI 3.1 REST endpoints and operational Prometheus metrics (`/metrics`).
-
-### Security Configuration
-
-Set the `AUDIT_SECRET_KEY` environment variable for production use:
-
-```bash
-export AUDIT_SECRET_KEY="your-secure-random-key"
-```
-
----
-
-## 🧪 Testing & Verification
-
-Run the automated test suite:
-
-```bash
-pytest -v
-```
-
-Execute high-throughput batch simulation benchmarks:
-
-```bash
-python simulator.py 1000
-```
-
----
-
-## 🐳 Container Deployment
-
-```bash
-# Build and run with Docker
+```sh
 docker build -t cyp-drug-interaction-checker .
-docker run -p 8000:8000 -e AUDIT_SECRET_KEY=your-secret cyp-drug-interaction-checker
-
-# Or use Docker Compose
-AUDIT_SECRET_KEY=your-secret docker-compose up
+docker run --rm -p 8000:8000 -e AUDIT_SECRET_KEY="your-long-secret" cyp-drug-interaction-checker
 ```
 
----
+The legacy experimental `cli.py audit`, `cli.py chat`, `cli.py batch`, `/api/audit`, and `/api/chat` workflows remain available. **They operate on synthetic generic thresholds; they do not perform pharmacological interaction prediction or clinical validation.** The mock chat adapter does not call an external model.
 
-## 📊 CYP450 Drug Database
+The audit trail uses an HMAC-SHA256 hash chain held **in process memory**, with verification of signatures and links. Set `AUDIT_SECRET_KEY` for a stable key. This is not persistent storage, a clinical audit system, or proof of HIPAA compliance. Identifier checks use heuristic patterns and may miss sensitive information; never input PHI.
 
-The built-in database includes common CYP450 interactions:
+## Development and testing
 
-| Enzyme | Interaction Type | Examples |
-|:-------|:-----------------|:---------|
-| CYP3A4 | Inhibitor | Ketoconazole, Itraconazole, Clarithromycin, Ritonavir |
-| CYP3A4 | Substrate | Simvastatin, Midazolam, Cyclosporine |
-| CYP3A4 | Inducer | Carbamazepine, Phenytoin, Rifampin |
-| CYP2D6 | Inhibitor | Fluoxetine, Paroxetine, Quinidine |
-| CYP2D6 | Substrate | Codeine, Tamoxifen, Metoprolol |
-| CYP2C19 | Inhibitor | Omeprazole |
-| CYP2C19 | Substrate | Clopidogrel |
-| CYP2C9 | Inhibitor | Fluconazole |
-| CYP2C9 | Substrate | Warfarin |
-| CYP1A2 | Inhibitor | Fluvoxamine |
-| CYP2B6 | Substrate | Efavirenz, Bupropion |
+```sh
+python -m pytest -q
+python -m compileall -q agents cyp_checker.py enrichment.py cli.py simulator.py
+node --check web/app.js
+node --test tests/web.test.cjs
+```
+
+GitHub Actions runs Python tests for 3.10/3.11/3.12, browser JavaScript tests with Node 22, and Python/JS catalog parity checks. The static browser frontend does **not** require Python or Pyodide; the FastAPI backend and legacy supervisor require a Python server. Modern browsers supporting ES2021 APIs are expected to work; browser-device testing should be performed before clinical or institutional use.
+
+## Technology and license
+
+Python standard library, FastAPI, Pydantic, and vanilla HTML/CSS/JavaScript. Licensed under the [MIT License](LICENSE).

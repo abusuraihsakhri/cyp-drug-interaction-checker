@@ -24,6 +24,19 @@ jobs:
         run: python -m pip install -r requirements.txt
       - name: Python tests
         run: python -m pytest -q
+      - name: Smoke-test served browser and API
+        run: |
+          python -m uvicorn agents.api:app --host 127.0.0.1 --port 8765 &
+          server=$!
+          trap 'kill $server' EXIT
+          for i in 1 2 3 4 5 6 7 8; do
+            if curl --silent --fail http://127.0.0.1:8765/health > /dev/null; then break; fi
+            sleep 1
+          done
+          curl --silent --show-error --fail http://127.0.0.1:8765/ | grep -q "CYP450 Drug Role Lookup"
+          curl --silent --show-error --fail http://127.0.0.1:8765/app.js | grep -q "const RECORDS"
+          curl --silent --show-error --fail --get --data-urlencode 'query=ketoconazole' http://127.0.0.1:8765/api/lookup | grep -q Ketoconazole
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8765/api/lookup)" = 422
       - name: Compile Python
         run: python -m compileall -q agents cyp_checker.py enrichment.py cli.py simulator.py
       - name: Check browser app

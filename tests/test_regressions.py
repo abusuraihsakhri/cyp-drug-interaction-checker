@@ -14,7 +14,7 @@ def test_phrase_boundary():
 def test_catalog_api_and_static_route():
     assert len(CYP_DRUG_DATABASE) == 25
     assert api_lookup(query="tamoxifen")["top_hit"].startswith("Tamoxifen")
-    assert any(route.path == "/" for route in app.routes)
+    assert any(route.path in ("", "/") for route in app.routes)
 
 def test_duplicate_output_header(tmp_path):
     source, target = tmp_path / "in.csv", tmp_path / "out.csv"

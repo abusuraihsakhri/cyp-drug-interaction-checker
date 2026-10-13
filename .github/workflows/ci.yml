@@ -53,3 +53,16 @@ jobs:
           records = json.loads(subprocess.check_output(["node", "-e", command], text=True))
           assert records == [list(row) for row in CYP_DRUG_DATABASE]
           PY
+      - name: Build Docker image
+        if: matrix.python-version == '3.12'
+        run: docker build --tag cyp-drug-interaction-checker:ci .
+      - name: Smoke-test Docker container
+        if: matrix.python-version == '3.12'
+        run: |
+          docker run -d --name cyp-ci -p 18765:8000 -e AUDIT_SECRET_KEY=ci-only-example-key cyp-drug-interaction-checker:ci
+          trap 'docker logs cyp-ci; docker rm -f cyp-ci' EXIT
+          for i in 1 2 3 4 5 6 7 8 9 10; do
+            if curl --silent --fail http://127.0.0.1:18765/health > /dev/null; then break; fi
+            sleep 1
+          done
+          curl --silent --show-error --fail http://127.0.0.1:18765/ | grep -q "CYP450 Drug Role Lookup"

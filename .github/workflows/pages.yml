@@ -34,3 +34,28 @@ jobs:
           path: web
       - id: deployment
         uses: actions/deploy-pages@v4
+      - name: Verify published HTML and JavaScript
+        env:
+          PAGE_URL: ${{ steps.deployment.outputs.page_url }}
+        run: |
+          python - <<'PY'
+          import os
+          import time
+          import urllib.request
+          base = os.environ['PAGE_URL'].rstrip('/')
+          for attempt in range(12):
+              try:
+                  with urllib.request.urlopen(base + '/', timeout=10) as resp:
+                      html = resp.read().decode('utf-8')
+                  with urllib.request.urlopen(base + '/app.js', timeout=10) as resp:
+                      js = resp.read().decode('utf-8')
+                  assert '<title>CYP450 Drug Role Lookup</title>' in html
+                  assert 'const RECORDS' in js
+                  print('Verified live HTML and application script at', base)
+                  break
+              except (OSError, AssertionError) as exc:
+                  if attempt == 11:
+                      raise
+                  print('Published assets not available yet:', exc)
+                  time.sleep(5)
+          PY

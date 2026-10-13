@@ -40,7 +40,7 @@ function lookup(query) {
   const qt = new Set(q.split(/\s+/));
   return RECORDS.map(function (r, index) {
     const terms = new Set(r.label.toLowerCase().split(/\s+/));
-    let score = r.key && q.includes(r.key) ? 10 : 0;
+    let score = r.key && new RegExp("(^|\\W)" + r.key.replaceAll(".", "\\.") + "(?!\\w)").test(q) ? 10 : 0;
     qt.forEach(function (term) { if (terms.has(term)) score += 2; });
     if (!score) return null;
     return {name:r.name, enzyme:r.enzyme, role:r.role, tier:r.tier,

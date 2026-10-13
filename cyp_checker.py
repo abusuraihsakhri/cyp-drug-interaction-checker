@@ -97,11 +97,17 @@ def process_csv(inp, out):
                       interaction_type=match["interaction_type"], severity=match["severity"])
         results.append(merged)
 
+    def safe_cell(value):
+        # Guard against formula execution when exporting untrusted CSV to spreadsheets.
+        if isinstance(value, str) and re.match(r"^\s*[=+@-]", value):
+            return "'" + value
+        return value
+
     output_fields = list(dict.fromkeys(list(fields) + list(OUTPUT_FIELDS)))
     with open(out, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=output_fields)
         writer.writeheader()
-        writer.writerows(results)
+        writer.writerows({key: safe_cell(value) for key, value in row.items()} for row in results)
     return results
 
 

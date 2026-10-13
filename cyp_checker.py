@@ -1,18 +1,14 @@
 #!/usr/bin/env python3
-"""
-CYP Drug Interaction Checker
-CYP450 substrate/inhibitor/inducer interaction checker with severity tiers.
-Stdlib parser / mapper with batch CSV and single lookup.
+"""Small, illustrative CYP450 role catalog and command-line CSV lookup.
+
+Record tiers are legacy tags, NOT validated pairwise DDI risk classifications.
 """
 import argparse
 import csv
+import re
 import sys
 
-
-# CYP450 drug interaction database
-# Format: (display_name, search_key, interaction_type, severity)
 CYP_DRUG_DATABASE = [
-    # CYP3A4 interactions
     ("Ketoconazole - strong CYP3A4 inhibitor", "ketoconazole", "inhibitor", "major"),
     ("Itraconazole - strong CYP3A4 inhibitor", "itraconazole", "inhibitor", "major"),
     ("Clarithromycin - strong CYP3A4 inhibitor", "clarithromycin", "inhibitor", "major"),
@@ -24,159 +20,126 @@ CYP_DRUG_DATABASE = [
     ("Phenytoin - CYP3A4 inducer", "phenytoin", "inducer", "major"),
     ("Rifampin - CYP3A4 inducer", "rifampin", "inducer", "major"),
     ("St. John's Wort - CYP3A4 inducer", "st. john", "inducer", "major"),
-    # CYP2D6 interactions
     ("Fluoxetine - strong CYP2D6 inhibitor", "fluoxetine", "inhibitor", "major"),
     ("Paroxetine - strong CYP2D6 inhibitor", "paroxetine", "inhibitor", "major"),
     ("Quinidine - strong CYP2D6 inhibitor", "quinidine", "inhibitor", "major"),
     ("Codeine - CYP2D6 substrate (prodrug)", "codeine", "substrate", "major"),
     ("Tamoxifen - CYP2D6 substrate (prodrug)", "tamoxifen", "substrate", "major"),
     ("Metoprolol - CYP2D6 substrate", "metoprolol", "substrate", "moderate"),
-    # CYP2C19 interactions
     ("Omeprazole - CYP2C19 inhibitor", "omeprazole", "inhibitor", "moderate"),
     ("Clopidogrel - CYP2C19 substrate (prodrug)", "clopidogrel", "substrate", "major"),
-    # CYP2C9 interactions
     ("Warfarin - CYP2C9 substrate", "warfarin", "substrate", "major"),
     ("Fluconazole - CYP2C9 inhibitor", "fluconazole", "inhibitor", "moderate"),
-    # CYP1A2 interactions
     ("Fluvoxamine - strong CYP1A2 inhibitor", "fluvoxamine", "inhibitor", "major"),
     ("Caffeine - CYP1A2 substrate", "caffeine", "substrate", "minor"),
-    # CYP2B6 interactions
     ("Efavirenz - CYP2B6 substrate", "efavirenz", "substrate", "moderate"),
     ("Bupropion - CYP2B6 substrate", "bupropion", "substrate", "moderate"),
 ]
 
-# Severity ranking for scoring
 SEVERITY_SCORE = {"major": 3, "moderate": 2, "minor": 1}
+OUTPUT_FIELDS = ("top_hit", "lookup_score", "interaction_type", "severity")
 
 
 def lookup(query, extra=None):
-    """Single lookup: token overlap + substring scoring (no deps). Returns top hits.
-
-    Args:
-        query: Drug name or CYP interaction term to search for
-        extra: Optional dict with additional context (unused in scoring but returned in result)
-
-    Returns:
-        dict with query, top_hit, score, interaction_type, severity, and all matches
-    """
-    q = str(query).lower().strip()
+    """Search catalog by drug key and label tokens; ranking is text relevance."""
+    q = str(query or "").casefold().strip()
     if not q:
-        return {"query": query, "top_hit": "no match", "score": 0, "interaction_type": None, "severity": None, "all": [], "extra": extra}
-
+        return {"query": query, "top_hit": "no match", "score": 0,
+                "interaction_type": None, "severity": None, "all": [], "extra": extra}
+    query_terms = set(q.split())
     scored = []
-    for label, key, interaction_type, severity in CYP_DRUG_DATABASE:
-        score = 0
-        label_lower = label.lower()
-
-        # Exact substring match
-        if key in q:
-            score += 10
-
-        # Token overlap
-        qt = set(q.split())
-        lt = set(label_lower.split())
-        overlap = len(qt & lt)
-        score += overlap * 2
-
-        # Only add severity bonus if there's an actual match
-        if score > 0:
-            score += SEVERITY_SCORE.get(severity, 0)
-            scored.append((score, label, interaction_type, severity))
-
-    scored.sort(reverse=True, key=lambda x: x[0])
+    for label, key, role, tier in CYP_DRUG_DATABASE:
+        # Match drug names as phrases, not inside unrelated longer words.
+        name_match = re.search(r"(?<!\w)" + re.escape(key) + r"(?!\w)", q) is not None
+        overlap = len(query_terms.intersection(label.casefold().split()))
+        score = (10 if name_match else 0) + overlap * 2
+        if score:
+            scored.append((score + SEVERITY_SCORE[tier], label, role, tier))
+    scored.sort(key=lambda x: x[0], reverse=True)
     top = scored[0] if scored else (0, "no match", None, None)
-    return {
-        "query": query,
-        "top_hit": top[1],
-        "score": top[0],
-        "interaction_type": top[2],
-        "severity": top[3],
-        "all": [(s, l, it, sev) for s, l, it, sev in scored[:5]],
-        "extra": extra,
-    }
+    return {"query": query, "top_hit": top[1], "score": top[0],
+            "interaction_type": top[2], "severity": top[3], "all": scored[:5],
+            "extra": extra}
 
 
 def process_csv(inp, out):
-    """Process a CSV file for drug interaction lookups.
-
-    Args:
-        inp: Path to input CSV file
-        out: Path to output CSV file
-
-    Returns:
-        List of result rows
-
-    Raises:
-        FileNotFoundError: If input file does not exist
-        ValueError: If CSV is malformed or empty
-    """
+    """Process UTF-8 CSV; reject invalid headers and malformed rows."""
     try:
         with open(inp, newline="", encoding="utf-8-sig") as f:
-            reader = csv.DictReader(f)
+            reader = csv.DictReader(f, restkey="__extra_columns__", strict=True)
+            fields = reader.fieldnames
+            if not fields or not any(name and name.strip() for name in fields):
+                raise ValueError("CSV is empty or has no headers")
+            if any(not name or not name.strip() for name in fields):
+                raise ValueError("CSV contains a blank column heading")
+            if len(set(name.casefold() for name in fields)) != len(fields):
+                raise ValueError("CSV headers must be unique")
             rows = list(reader)
-            fn = reader.fieldnames
+    except FileNotFoundError as exc:
+        raise FileNotFoundError("Input file not found: '" + str(inp) + "'") from exc
+    except csv.Error as exc:
+        raise ValueError("Malformed CSV: " + str(exc)) from exc
 
-            if not fn:
-                raise ValueError(f"CSV file '{inp}' is empty or has no headers")
-    except FileNotFoundError:
-        raise FileNotFoundError(f"Input file not found: '{inp}'")
-
-    # Guess query column
-    qcol = fn[0]
-    for cand in ["query", "test", "drug", "code", "variant", "hla", "lab", "name"]:
-        if cand in [c.lower() for c in fn]:
-            qcol = [c for c in fn if c.lower() == cand][0]
+    qcol = fields[0]
+    for candidate in ("query", "test", "drug", "code", "variant", "hla", "lab", "name"):
+        match = next((name for name in fields if name.casefold() == candidate), None)
+        if match is not None:
+            qcol = match
             break
 
     results = []
-    for row in rows:
-        res = lookup(row.get(qcol, ""), row)
-        merged = {**row, "top_hit": res["top_hit"], "lookup_score": res["score"],
-                  "interaction_type": res["interaction_type"], "severity": res["severity"]}
+    for row_number, row in enumerate(rows, start=2):
+        if "__extra_columns__" in row or any(row[name] is None for name in fields):
+            raise ValueError("CSV row " + str(row_number) + " has the wrong number of columns")
+        match = lookup(row[qcol])
+        merged = dict(row)
+        merged.update(top_hit=match["top_hit"], lookup_score=match["score"],
+                      interaction_type=match["interaction_type"], severity=match["severity"])
         results.append(merged)
 
-    with open(out, "w", newline="", encoding="utf-8") as f:
-        w = csv.DictWriter(f, fieldnames=list(fn) + ["top_hit", "lookup_score", "interaction_type", "severity"])
-        w.writeheader()
-        w.writerows(results)
+    def safe_cell(value):
+        # Guard against formula execution when exporting untrusted CSV to spreadsheets.
+        if isinstance(value, str) and re.match(r"^\s*[=+@-]", value):
+            return "'" + value
+        return value
 
+    output_fields = list(dict.fromkeys(list(fields) + list(OUTPUT_FIELDS)))
+    with open(out, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=output_fields)
+        writer.writeheader()
+        writer.writerows({key: safe_cell(value) for key, value in row.items()} for row in results)
     return results
 
 
 def build_parser():
-    p = argparse.ArgumentParser(prog="cyp_checker", description="CYP Drug Interaction Checker")
-    sub = p.add_subparsers(dest="cmd", required=True)
-    s = sub.add_parser("single")
-    s.add_argument("query", nargs="?", default="simvastatin")
-    s.add_argument("--query", dest="q2")
-    b = sub.add_parser("batch")
-    b.add_argument("--input", required=True, help="Path to input CSV file")
-    b.add_argument("--output", required=True, help="Path to output CSV file")
-    return p
+    parser = argparse.ArgumentParser(prog="cyp_checker", description="CYP role catalog (not clinical DDI decision support)")
+    sub = parser.add_subparsers(dest="cmd", required=True)
+    single = sub.add_parser("single")
+    single.add_argument("query", nargs="?", default="simvastatin")
+    single.add_argument("--query", dest="q2")
+    batch = sub.add_parser("batch")
+    batch.add_argument("--input", required=True)
+    batch.add_argument("--output", required=True)
+    return parser
 
 
 def main(argv=None):
-    p = build_parser()
-    a = p.parse_args(argv)
-    if a.cmd == "single":
-        q = getattr(a, "q2", None) or getattr(a, "query")
-        print(lookup(q))
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    if args.cmd == "single":
+        print(lookup(args.q2 or args.query))
         return 0
-    if a.cmd == "batch":
+    if args.cmd == "batch":
         try:
-            res = process_csv(a.input, a.output)
-            print(f"Processed {len(res)} -> {a.output}")
-            return 0
-        except FileNotFoundError as e:
-            print(f"Error: {e}", file=sys.stderr)
+            results = process_csv(args.input, args.output)
+        except (FileNotFoundError, ValueError, OSError) as exc:
+            print("Error: " + str(exc), file=sys.stderr)
             return 1
-        except ValueError as e:
-            print(f"Error: {e}", file=sys.stderr)
-            return 1
-    p.print_help()
+        print("Processed " + str(len(results)) + " -> " + args.output)
+        return 0
+    parser.print_help()
     return 1
 
 
 if __name__ == "__main__":
-    import sys
     sys.exit(main())
